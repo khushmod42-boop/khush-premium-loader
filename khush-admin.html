@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KHUSH PREMIUM LOADER | Admin</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{color-scheme:dark;--bg:#08090d;--panel:#12141b;--line:#292d38;--red:#ed2338;--muted:#a4a9b6}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 50% -20%,#351019 0,transparent 42%),var(--bg);color:#f7f7fa;font:15px system-ui,Arial,sans-serif;min-height:100vh}
+main{width:min(960px,94%);margin:34px auto}.brand{text-align:center;margin-bottom:24px}.brand b{color:var(--red);letter-spacing:3px;font-size:13px}.brand h1{margin:7px 0;font-size:clamp(25px,5vw,38px)}.brand p,.muted{color:var(--muted)}
+.card{background:rgba(18,20,27,.96);border:1px solid var(--line);border-radius:16px;padding:20px;margin:15px 0;box-shadow:0 12px 36px #0005}
+h2{font-size:18px;margin:0 0 15px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+input,select,button{width:100%;border-radius:10px;border:1px solid var(--line);padding:13px;background:#0b0d12;color:white;font:inherit}
+button{background:var(--red);border:0;font-weight:700;cursor:pointer}button.secondary{background:#292d38}button.danger{background:#7e1825;padding:8px 10px;width:auto}
+label{display:block;color:var(--muted);font-size:13px;margin-bottom:6px}.field{margin-bottom:12px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px}.hidden{display:none!important}
+.notice{padding:11px;border-radius:10px;background:#242832;color:#e7e9ef;margin:12px 0;overflow-wrap:anywhere}.error{background:#451923;color:#ffdce1}.success{background:#123524;color:#c9ffe0}
+table{width:100%;border-collapse:collapse;min-width:600px}th,td{text-align:left;padding:11px;border-bottom:1px solid var(--line);font-size:13px}th{color:var(--muted)}.tablewrap{overflow-x:auto}.pill{padding:4px 8px;border-radius:30px;background:#263c30;color:#a9f4c4}.off{background:#44232a;color:#ffc1c8}
+.key{font-family:ui-monospace,monospace;overflow-wrap:anywhere}.small{font-size:12px;color:var(--muted)}
+@media(max-width:600px){.grid{grid-template-columns:1fr}.card{padding:15px}main{margin:20px auto}}
+</style>
+</head>
+<body>
+<main>
+  <header class="brand"><b>KHUSH MOD • CONTROL CENTER</b><h1>PREMIUM LOADER</h1><p>License Administration Panel</p></header>
+
+  <section id="loginCard" class="card">
+    <h2>Admin Login</h2>
+    <div class="field"><label for="email">Admin email</label><input id="email" type="email" autocomplete="username" placeholder="Enter admin email"></div>
+    <div class="field"><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" placeholder="Enter password"></div>
+    <button id="loginBtn">LOGIN</button>
+    <div id="loginMsg" class="notice hidden"></div>
+  </section>
+
+  <section id="panel" class="hidden">
+    <div class="card row"><div><b>Admin Dashboard</b><div id="who" class="small"></div></div><button id="logoutBtn" class="secondary" style="width:auto">LOG OUT</button></div>
+    <section class="card">
+      <h2>Generate License Key</h2>
+      <div class="grid">
+        <div class="field"><label for="duration">License duration</label><select id="duration"><option value="1">1 Day</option><option value="7">7 Days</option><option value="30">30 Days</option><option value="3650">10 Years</option></select></div>
+        <div class="field"><label for="quantity">Quantity</label><select id="quantity"><option>1</option><option>5</option><option>10</option><option>25</option></select></div>
+      </div>
+      <button id="generateBtn">GENERATE KEY</button>
+      <div id="generated" class="notice hidden"></div>
+      <div id="createMsg" class="notice hidden"></div>
+    </section>
+    <section class="card">
+      <div class="row"><h2>License Keys</h2><button id="refreshBtn" class="secondary" style="width:auto">REFRESH</button></div>
+      <div id="listMsg" class="notice hidden"></div>
+      <div class="tablewrap"><table><thead><tr><th>License Key</th><th>Duration</th><th>Expiry</th><th>Status</th><th>Device</th><th>Action</th></tr></thead><tbody id="licenseRows"><tr><td colspan="6">Loading…</td></tr></tbody></table></div>
+    </section>
+  </section>
+  <p class="small" style="text-align:center">Use only for your own legitimate application. Never place a Supabase secret/service-role key in this website.</p>
+</main>
+<script>
+(() => {
+  // Project URL is the base project URL; do not include /rest/v1.
+  const SUPABASE_URL = "https://hwvhivyddcemsxhoptrc.supabase.co";
+  const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_stJ8ELpHH6ZLE2Ld_s3bBw_ZwTJ1Eu5";
+  const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+  const $ = id => document.getElementById(id);
+  const show = (id, msg, type="") => { const el=$(id); el.textContent=msg; el.className="notice "+type; el.classList.remove("hidden"); };
+  const hide = id => $(id).classList.add("hidden");
+  let currentUser = null;
+
+  async function checkAdmin(user) {
+    const {data,error}=await db.from("admin_users").select("user_id").eq("user_id",user.id).maybeSingle();
+    if(error) throw error;
+    if(!data) throw new Error("This account is not listed as an admin.");
+  }
+  async function enter(user) {
+    await checkAdmin(user);
+    currentUser=user;
+    $("who").textContent=user.email || "Admin";
+    $("loginCard").classList.add("hidden");
+    $("panel").classList.remove("hidden");
+    await loadLicenses();
+  }
+  $("loginBtn").onclick=async()=>{
+    hide("loginMsg"); $("loginBtn").disabled=true;
+    try {
+      const {data,error}=await db.auth.signInWithPassword({email:$("email").value.trim(),password:$("password").value});
+      if(error) throw error;
+      await enter(data.user);
+    } catch(e) { show("loginMsg",e.message || "Login failed","error"); await db.auth.signOut(); }
+    finally { $("loginBtn").disabled=false; }
+  };
+  $("logoutBtn").onclick=async()=>{await db.auth.signOut();currentUser=null;$("panel").classList.add("hidden");$("loginCard").classList.remove("hidden");};
+  function makeKey(){
+    const bytes=new Uint8Array(12); crypto.getRandomValues(bytes);
+    return "KHUSH-"+Array.from(bytes,b=>b.toString(16).padStart(2,"0")).join("").toUpperCase().match(/.{1,4}/g).join("-");
+  }
+  $("generateBtn").onclick=async()=>{
+    hide("createMsg");hide("generated");$("generateBtn").disabled=true;
+    try{
+      const days=Number($("duration").value), count=Number($("quantity").value);
+      const rows=Array.from({length:count},()=>({license_key:makeKey(),duration_days:days}));
+      const {data,error}=await db.from("licenses").insert(rows).select("license_key,duration_days");
+      if(error) throw error;
+      show("generated","Created:\n"+data.map(x=>x.license_key).join("\n"),"success");
+      await loadLicenses();
+    }catch(e){show("createMsg",e.message || "Could not create keys","error");}
+    finally{$("generateBtn").disabled=false;}
+  };
+  async function loadLicenses(){
+    $("licenseRows").innerHTML='<tr><td colspan="6">Loading…</td></tr>';
+    try{
+      const {data,error}=await db.from("licenses").select("id,license_key,duration_days,created_at,expires_at,is_active,device_id").order("created_at",{ascending:false}).limit(200);
+      if(error) throw error;
+      if(!data.length){$("licenseRows").innerHTML='<tr><td colspan="6">No licenses yet.</td></tr>';return;}
+      $("licenseRows").innerHTML="";
+      for(const item of data){
+        const expiry=item.expires_at || (item.created_at ? new Date(new Date(item.created_at).getTime()+item.duration_days*86400000).toISOString() : null);
+        const expired=expiry && new Date(expiry).getTime()<=Date.now();
+        const active=item.is_active && !expired;
+        const tr=document.createElement("tr");
+        const vals=[item.license_key,item.duration_days+" days",expiry?new Date(expiry).toLocaleString():"—",active?"Active":(expired?"Expired":"Revoked"),item.device_id||"Unbound"];
+        vals.forEach((v,i)=>{const td=document.createElement("td");td.textContent=v;if(i===0)td.className="key";if(i===3){const s=document.createElement("span");s.className="pill "+(active?"":"off");s.textContent=v;td.textContent="";td.append(s);}tr.append(td);});
+        const action=document.createElement("td");
+        if(item.is_active){const btn=document.createElement("button");btn.className="danger";btn.textContent="Revoke";btn.onclick=()=>revoke(item.id);action.append(btn);}else action.textContent="—";
+        tr.append(action);$("licenseRows").append(tr);
+      }
+    }catch(e){$("licenseRows").innerHTML="";show("listMsg",e.message || "Could not load licenses","error");}
+  }
+  async function revoke(id){
+    if(!confirm("Revoke this license key?"))return;
+    const {error}=await db.from("licenses").update({is_active:false}).eq("id",id);
+    if(error) show("listMsg",error.message,"error"); else {hide("listMsg");await loadLicenses();}
+  }
+  $("refreshBtn").onclick=loadLicenses;
+  db.auth.getSession().then(async({data})=>{if(data.session){try{await enter(data.session.user);}catch(e){show("loginMsg",e.message,"error");await db.auth.signOut();}}});
+})();
+</script>
+</body>
+</html>
