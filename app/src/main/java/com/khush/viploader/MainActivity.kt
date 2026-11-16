@@ -38,7 +38,7 @@ class MainActivity : Activity() {
         val title = TextView(this).apply {
             text = "PREMIUM LOADER"
             textSize = 20f
-            letterSpacing = .18f
+            letterSpacing = 0.18f
             setTextColor(red)
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
